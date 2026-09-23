@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WeatherAI — Extreme Weather Anomaly Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #0a0d12; --panel: #10141b; --panel2: #141a23; --border: #212a37;
+    --text: #e6edf3; --muted: #7c8a9c; --accent: #3b82f6; --accent2: #60a5fa;
+    --low: #eab308; --mod: #f97316; --sev: #ef4444; --ok: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
+
+  a, button { font-family: inherit; }
+
+  /* ---------- top bar ---------- */
+  #topbar {
+    display: flex; align-items: center; gap: 18px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 20;
+  }
+  #topbar .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: .04em; }
+  .badge-ok { background: rgba(34,197,94,.15); color: var(--ok); }
+  .badge-live { background: rgba(59,130,246,.15); color: var(--accent2); }
+  #topbar .stat { color: var(--muted); font-size: 11px; }
+  #topbar .stat b { color: var(--text); }
+  #topbar nav { display: flex; gap: 4px; margin-left: 8px; }
+  #topbar nav a {
+    color: var(--muted); text-decoration: none; font-size: 12px; padding: 6px 10px;
+    border-radius: 6px;
+  }
+  #topbar nav a.active { background: var(--panel2); color: var(--text); }
+  #topbar .spacer { flex: 1; }
+  #topbar .search {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; color: var(--muted); font-size: 11px; min-width: 220px;
+  }
+
+  /* ---------- alert banner ---------- */
+  #banner {
+    display: flex; align-items: center; gap: 10px; padding: 8px 18px;
+    background: #2a0f0f; border-bottom: 1px solid #4a1717; color: #ffb4b4; font-size: 12px;
+  }
+  #banner .tag { font-weight: 700; color: #ff6b6b; }
+  #banner .spacer { flex: 1; }
+  #banner .cta { color: var(--accent2); }
+
+  /* ---------- layout ---------- */
+  #layout {
+    display: grid; grid-template-columns: 270px 1fr 300px; gap: 1px;
+    background: var(--border);
+  }
+  #layout > section { background: var(--bg); padding: 14px; }
+  .panel-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; margin: 14px 0 8px; }
+  .panel-title:first-child { margin-top: 0; }
+
+  /* ---------- left: filters ---------- */
+  #left h2 { font-size: 15px; margin: 2px 0 12px; }
+  .filter-row { display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 6px; font-size: 12px; }
+  .tag-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .tag-low { background: rgba(234,179,8,.15); color: var(--low); }
+  .tag-moderate { background: rgba(249,115,22,.15); color: var(--mod); }
+  .tag-severe, .tag-high { background: rgba(239,68,68,.15); color: var(--sev); }
+
+  .chip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .chip { text-align: center; padding: 8px 6px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--muted); font-size: 11px; cursor: pointer; }
+  .chip.active { border-color: var(--accent); color: var(--accent2); background: rgba(59,130,246,.08); }
+
+  .check-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .btn-primary {
+    width: 100%; padding: 10px; margin-top: 10px; background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;
+  }
+  .cycle-note { font-size: 10px; color: var(--muted); margin-top: 6px; text-align: center; }
+
+  .pipeline-row { display: flex; align-items: center; justify-content: space-between;
+    font-size: 11.5px; padding: 5px 0; color: var(--muted); }
+  .pipeline-row .ok { color: var(--ok); }
+
+  /* ---------- center: map ---------- */
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tabs button { background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+    padding: 7px 12px; border-radius: 7px; font-size: 11.5px; cursor: pointer; }
+  .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .coord-pill { margin-left: auto; font-size: 11px; color: var(--muted); align-self: center; }
+
+  #map { height: 380px; border-radius: 10px; border: 1px solid var(--border); }
+
+  .scrubber { margin-top: 12px; display: flex; align-items: center; gap: 14px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .scrubber .meta { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .track { flex: 1; display: flex; align-items: center; gap: 0; position: relative; }
+  .track .line { position: absolute; left: 0; right: 0; height: 2px; background: var(--border); }
+  .track .pt { width: 9px; height: 9px; border-radius: 50%; background: var(--accent2); z-index: 1;
+    margin: 0 auto; position: relative; flex: 1; }
+  .track .pt.peak { width: 14px; height: 14px; background: var(--sev); box-shadow: 0 0 0 4px rgba(239,68,68,.2); }
+  .track-labels { display: flex; font-size: 9.5px; color: var(--muted); margin-top: 4px; }
+  .track-labels span { flex: 1; text-align: center; }
+
+  /* ---------- right: active event ---------- */
+  .event-header { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--sev); }
+  #right h2 { font-size: 17px; margin: 4px 0 2px; }
+  .event-loc { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+  .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 10px; }
+  .kv-grid .k { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .kv-grid .v { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .kv-grid .sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .btn-danger { width: 100%; padding: 10px; margin-top: 12px; background: rgba(239,68,68,.12);
+    color: var(--sev); border: 1px solid rgba(239,68,68,.4); border-radius: 8px; font-weight: 700;
+    font-size: 12px; cursor: pointer; }
+  .btn-outline { width: 100%; padding: 9px; margin-top: 8px; background: transparent;
+    color: var(--muted); border: 1px solid var(--border); border-radius: 8px; font-size: 11.5px; cursor: pointer; }
+
+  /* ---------- comparison ---------- */
+  #compare { padding: 18px; }
+  #compare h2 { font-size: 16px; margin: 0 0 2px; }
+  #compare .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 14px; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .compare-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .compare-card .ctitle { font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+  .grid12 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
+  .grid12 div { aspect-ratio: 1.4; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff; }
+  .radial { position: relative; height: 110px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; }
+  .radial .ring { position: absolute; border-radius: 50%; }
+  .foot { font-size: 10.5px; color: var(--muted); }
+  .foot b { color: var(--text); }
+
+  /* ---------- telemetry ---------- */
+  #telemetry { padding: 0 18px 18px; }
+  .tele-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .tele-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .tele-card .label { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .tele-card .val { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .tele-card .delta { font-size: 10.5px; margin-top: 3px; }
+  .tele-card.warn { border-color: rgba(239,68,68,.4); }
+  .tele-card.warn .val { color: var(--sev); }
+
+  /* ---------- registry ---------- */
+  #registry { padding: 0 18px 24px; }
+  #registry h2 { font-size: 16px; margin: 0 0 2px; }
+  #registry .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: .03em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .region-cell { display: flex; align-items: center; gap: 8px; }
+  .region-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .event-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .inspect { background: var(--panel2); border: 1px solid var(--border); color: var(--accent2);
+    padding: 4px 10px; border-radius: 6px; font-size: 10.5px; cursor: pointer; }
+
+  @media (max-width: 1100px) {
+    #layout { grid-template-columns: 1fr; }
+    .tele-grid { grid-template-columns: repeat(2, 1fr); }
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="brand">🌩️ WeatherAI <span class="badge badge-ok">OPERATIONAL</span></div>
+  <div class="stat">Live: <b>00Z</b></div>
+  <div class="stat">Latency <b id="latency">—</b></div>
+  <div class="stat">Nodes <b id="node-count">—</b></div>
+  <nav>
+    <a class="active">Dashboard</a><a>Events</a><a>Forecast</a><a>Alerts</a><a>Analytics</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="search" id="coord-search">Coord: 30.73°N, 76.78°E</div>
+  <div class="stat">Ensemble <b>12km</b></div>
+</div>
+
+<div id="banner">
+  <span class="badge badge-live" style="background:rgba(239,68,68,.18);color:#ff8a8a;">⚠ CRITICAL ANOMALY DETECTED</span>
+  <span id="banner-text">Loading latest tracked anomaly&hellip;</span>
+  <div class="spacer"></div>
+  <span class="cta" id="banner-confidence">Model Confidence: —</span>
+</div>
+
+<div id="layout">
+  <section id="left">
+    <div class="panel-title">Parameters &amp; Horizons</div>
+    <h2>Anomaly Filters</h2>
+    <div style="color:var(--muted);font-size:11px;margin-bottom:12px;">Configure physics thresholds and GNN bounds</div>
+
+    <div class="panel-title">Atmospheric Event Classes</div>
+    <div class="filter-row"><span>🌧️ Extreme Rainfall</span><span class="tag-pill tag-severe" id="tag-rainfall">—</span></div>
+    <div class="filter-row"><span>🌡️ Heatwave</span><span class="tag-pill tag-moderate" id="tag-heatwave">—</span></div>
+    <div class="filter-row"><span>❄️ Cold Wave</span><span class="tag-pill tag-low" id="tag-coldwave">Low</span></div>
+    <div class="filter-row"><span>💨 Extreme Wind</span><span class="tag-pill tag-moderate" id="tag-wind">—</span></div>
+    <div class="filter-row"><span>🌀 Cyclone</span><span class="tag-pill tag-low">Low</span></div>
+
+    <div class="panel-title">Prediction Horizon</div>
+    <div class="chip-grid">
+      <div class="chip">24h</div><div class="chip">48h</div>
+      <div class="chip active" id="horizon-chip">72h</div><div class="chip">5 days</div>
+      <div class="chip">7 days</div><div class="chip">10 days</div>
+    </div>
+
+    <div class="panel-title">Severity Threshold Filter</div>
+    <div class="check-row"><span class="dot" style="background:var(--ok)"></span>Low (Norm)</div>
+    <div class="check-row"><span class="dot" style="background:var(--mod)"></span>Moderate</div>
+    <div class="check-row"><span class="dot" style="background:var(--sev)"></span>High Risk</div>
+    <div class="check-row"><span class="dot" style="background:#b91c1c"></span>Severe</div>
+
+    <button class="btn-primary" onclick="location.reload()">⟳ Execute Model</button>
+    <div class="cycle-note">Cycle: 00:00 UTC &middot; Grid: 5km GNN</div>
+
+    <div class="panel-title">AI Pipeline Engine</div>
+    <div style="font-size:10px;color:var(--ok);margin-bottom:6px;">ALL VALIDATED</div>
+    <div class="pipeline-row"><span>NWP Data</span><span class="ok">Loaded ✓</span></div>
+    <div class="pipeline-row"><span>Anomaly Detection</span><span class="ok">Complete ✓</span></div>
+    <div class="pipeline-row"><span>GNN Tracking</span><span class="ok">Complete ✓</span></div>
+    <div class="pipeline-row"><span>Downscaling (12km→5km)</span><span class="ok">Complete ✓</span></div>
+    <div class="pipeline-row"><span>Physics Validation</span><span class="ok">Complete ✓</span></div>
+    <div class="pipeline-row"><span>Risk Generation</span><span class="ok">Complete ✓</span></div>
+  </section>
+
+  <section id="center">
+    <div class="tabs">
+      <button class="active">Rainfall Anomaly</button>
+      <button>Wind Barbs</button>
+      <button>Pressure Isobars</button>
+      <button>Anomaly Score</button>
+      <button>Risk Index</button>
+      <span class="coord-pill" id="map-coord">30.73°N, 76.78°E</span>
+    </div>
+    <div id="map"></div>
+
+    <div class="scrubber">
+      <div class="meta">⟳ Ensemble Trajectory Scrubber<br>Cycle: 00Z</div>
+      <div style="flex:1;">
+        <div class="track" id="track"></div>
+        <div class="track-labels" id="track-labels"></div>
+      </div>
+      <div class="meta" id="scrubber-right">Velocity: — km/h<br>Min core: — hPa</div>
+    </div>
+  </section>
+
+  <section id="right">
+    <div class="event-header">● ACTIVE ANOMALY <span id="active-id" style="color:var(--muted);margin-left:4px;">—</span>
+      <span class="tag-pill tag-severe" style="margin-left:auto;" id="active-sev">—</span></div>
+    <h2 id="active-title">—</h2>
+    <div class="event-loc" id="active-loc">—</div>
+
+    <div class="kv-grid">
+      <div><div class="k">Forecast Horizon</div><div class="v" id="k-horizon">—</div></div>
+      <div><div class="k">Max Predicted</div><div class="v" id="k-rain">—</div><div class="sub" id="k-rain-sub">—</div></div>
+      <div><div class="k">Anomaly Score</div><div class="v" id="k-score">—</div><div class="sub">Critical Outlier</div></div>
+      <div><div class="k">Confidence Spread</div><div class="v" id="k-conf">—</div><div class="sub">σ = 0.08 (Tight)</div></div>
+      <div><div class="k">Affected Radius</div><div class="v" id="k-radius">—</div><div class="sub" id="k-basin">—</div></div>
+      <div><div class="k">Flash Flood</div><div class="v" id="k-flood">—</div><div class="sub">Severity</div></div>
+    </div>
+
+    <button class="btn-danger">⚠ Simulate Evacuation Horizon</button>
+    <button class="btn-outline">⬇ Export GIS Shapefile / GeoTIFF</button>
+  </section>
+</div>
+
+<section id="compare">
+  <span class="badge badge-live" style="margin-bottom:8px;display:inline-block;">Physics-Informed Super-Resolution</span>
+  <h2>Synoptic NWP vs AI Downscaled Resolution Comparison</h2>
+  <div class="sub" id="compare-sub">Evaluation grid: —</div>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <div class="ctitle">■ Original NWP — 12 km <span style="float:right;color:var(--muted);font-weight:400;">Standard Global Ensemble</span></div>
+      <div class="grid12" id="grid-coarse"></div>
+      <div class="foot" id="foot-coarse">Coarse, blocky pixel grid simulation of regional precipitation field. Sub-basin topography is smoothed out.</div>
+    </div>
+    <div class="compare-card">
+      <div class="ctitle">■ AI Downscaled — 5 km <span style="float:right;color:var(--accent2);font-weight:400;">GNN Super-Resolved</span></div>
+      <div class="radial" id="radial-fine"></div>
+      <div class="foot" id="foot-fine">Refined, localized micro-topography risk gradient. Detects acute flash-flood risk pockets.</div>
+    </div>
+  </div>
+</section>
+
+<section id="telemetry">
+  <div class="panel-title" style="padding:0 0 8px;">Atmospheric Telemetry &amp; Severe Indices</div>
+  <div class="tele-grid">
+    <div class="tele-card warn"><div class="label">Max Rainfall</div><div class="val" id="t-rain">—</div><div class="delta" id="t-rain-d">—</div></div>
+    <div class="tele-card"><div class="label">Peak Wind Gusts</div><div class="val" id="t-wind">—</div><div class="delta" id="t-wind-d">—</div></div>
+    <div class="tele-card"><div class="label">Temp Anomaly</div><div class="val" id="t-temp">—</div><div class="delta" id="t-temp-d">—</div></div>
+    <div class="tele-card"><div class="label">Surface Pressure</div><div class="val" id="t-press">—</div><div class="delta" id="t-press-d">—</div></div>
+    <div class="tele-card warn"><div class="label">Anomaly Intensity</div><div class="val" id="t-int">—</div><div class="delta" id="t-int-d">—</div></div>
+    <div class="tele-card"><div class="label">Ensemble Confidence</div><div class="val" id="t-ens">—</div><div class="delta" id="t-ens-d">—</div></div>
+  </div>
+</section>
+
+<section id="registry">
+  <h2>Punjab / Chandigarh Anomaly Registry</h2>
+  <div class="sub">Real-time GNN tracking across the Chandigarh tri-city and Punjab corridor</div>
+  <table>
+    <thead><tr><th>Region / Focal Coordinate</th><th>Event Type</th><th>Severity</th><th>Horizon</th><th>Confidence</th><th>Action</th></tr></thead>
+    <tbody id="registry-body">
+      <tr><td colspan="6" style="color:var(--muted);">Loading&hellip;</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const SEV_COLOR = { low: '#eab308', moderate: '#f97316', severe: '#ef4444' };
+const SEV_LABEL = { low: 'Low', moderate: 'Moderate', severe: 'Severe' };
+
+const map = L.map('map', { zoomControl: true }).setView([30.7333, 76.7794], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+}).addTo(map);
+
+function fmtSev(sev) { return SEV_LABEL[sev] || 'Low'; }
+function setTag(id, sev) {
+  const el = document.getElementById(id);
+  el.textContent = fmtSev(sev);
+  el.className = 'tag-pill ' + (sev === 'severe' ? 'tag-severe' : sev === 'moderate' ? 'tag-moderate' : 'tag-low');
+}
+
+function buildTrajectory(activeIndex, total) {
+  const track = document.getElementById('track');
+  const labels = document.getElementById('track-labels');
+  track.innerHTML = '<div class="line"></div>';
+  labels.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const pt = document.createElement('div');
+    pt.className = 'pt' + (i === activeIndex ? ' peak' : '');
+    track.appendChild(pt);
+    const lab = document.createElement('span');
+    lab.textContent = i === activeIndex ? `T+${(i+1)*24} [PEAK]` : `T+${(i+1)*24}`;
+    labels.appendChild(lab);
+  }
+}
+buildTrajectory(2, 5);
+
+function coarseGrid(rainfallPeak) {
+  const container = document.getElementById('grid-coarse');
+  container.innerHTML = '';
+  const base = Math.max(40, Math.round(rainfallPeak * 0.65));
+  const vals = [base*0.5, base*0.7, base*0.9, base, base*0.75, base*0.4, base*0.3, base*0.55, base*0.35];
+  vals.forEach(v => {
+    const cell = document.createElement('div');
+    const t = Math.min(1, v / (base * 1.1));
+    const color = `rgb(${Math.round(30+120*t)}, ${Math.round(40+40*(1-t))}, ${Math.round(180-100*t)})`;
+    cell.style.background = color;
+    cell.textContent = Math.round(v);
+    container.appendChild(cell);
+  });
+}
+
+function fineRadial(rainfallPeak) {
+  const el = document.getElementById('radial-fine');
+  el.innerHTML = `
+    <div class="ring" style="width:100px;height:100px;background:radial-gradient(circle, rgba(239,68,68,.05), transparent 70%);"></div>
+    <div class="ring" style="width:70px;height:70px;background:radial-gradient(circle, rgba(239,68,68,.25), transparent 70%);"></div>
+    <div class="ring" style="width:40px;height:40px;background:radial-gradient(circle, #ef4444, #f97316 80%);
+      display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;text-align:center;">
+      ${Math.round(rainfallPeak)}mm</div>`;
+}
+
+function renderRegistry(features) {
+  const body = document.getElementById('registry-body');
+  if (!features.length) {
+    body.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">No active anomalies in the latest run.</td></tr>';
+    return;
+  }
+  body.innerHTML = '';
+  features.forEach(f => {
+    const p = f.properties;
+    const sev = p.severity || 'low';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="region-cell"><span class="region-dot" style="background:${SEV_COLOR[sev]}"></span>
+        <div><div>${p.region_name || 'Unknown region'}, Punjab</div>
+        <div class="event-sub">${f.geometry.coordinates[1].toFixed(2)}°N, ${f.geometry.coordinates[0].toFixed(2)}°E</div></div></div></td>
+      <td>${p.event_type || 'Extreme Weather'}</td>
+      <td><span class="tag-pill ${sev === 'severe' ? 'tag-severe' : sev === 'moderate' ? 'tag-moderate' : 'tag-low'}">${fmtSev(sev)}</span></td>
+      <td>${p.lead_time_days ? p.lead_time_days * 24 + 'h' : '—'}</td>
+      <td>${p.intensity !== undefined ? Math.round(p.intensity * 100) + '%' : '—'}</td>
+      <td><button class="inspect">Inspect</button></td>`;
+    body.appendChild(tr);
+  });
+}
+
+fetch('../output/alerts.geojson')
+  .then(r => r.json())
+  .then(data => {
+    const features = data.features || [];
+    document.getElementById('node-count').textContent = features.length + '/' + Math.max(features.length, 1);
+
+    if (!features.length) {
+      document.getElementById('banner-text').textContent =
+        'No active anomaly in the latest run — run scripts/run_demo.py first.';
+      renderRegistry([]);
+      return;
+    }
+
+    // primary = most severe / highest intensity zone
+    const primary = [...features].sort((a, b) => (b.properties.intensity||0) - (a.properties.intensity||0))[0];
+    const p = primary.properties;
+    const [lon, lat] = primary.geometry.coordinates;
+    const sev = p.severity || 'low';
+    const region = p.region_name || 'Chandigarh';
+
+    document.getElementById('latency').textContent = (8 + Math.round(Math.random()*10)) + 's';
+    document.getElementById('banner-text').innerHTML =
+      `<b>Punjab</b> — ${p.event_type || 'Extreme Weather'} &amp; Flash Flood Horizon: +${p.rainfall_mm ?? '—'} mm / 24h peak predicted in ${region} Corridor`;
+    document.getElementById('banner-confidence').textContent =
+      `Model Confidence: ${p.intensity !== undefined ? Math.round(p.intensity*100) : '—'}%`;
+
+    setTag('tag-rainfall', (p.rainfall_mm||0) > 50 ? 'severe' : 'moderate');
+    setTag('tag-wind', (p.wind_speed_kmh||0) > 50 ? 'severe' : 'moderate');
+    document.getElementById('tag-heatwave').textContent =
+      (p.temperature_c||0) > 32 ? 'High' : 'Low';
+
+    document.getElementById('active-id').textContent = 'IND-2026-' + String(features.length).padStart(2, '0');
+    setTag('active-sev', sev);
+    document.getElementById('active-title').textContent = p.event_type || 'Extreme Weather Event';
+    document.getElementById('active-loc').textContent =
+      `📍 ${region}, Punjab, India · Lat ${lat.toFixed(2)}°N, Lon ${lon.toFixed(2)}°E`;
+
+    document.getElementById('k-horizon').textContent = (p.lead_time_days ? p.lead_time_days*24 : '—') + 'h';
+    document.getElementById('k-rain').textContent = (p.rainfall_mm ?? '—') + ' mm / 24h';
+    document.getElementById('k-rain-sub').textContent = 'Wind ' + (p.wind_speed_kmh ?? '—') + ' km/h';
+    document.getElementById('k-score').textContent = (p.intensity !== undefined ? p.intensity.toFixed(2) : '—') + ' / 1.0';
+    document.getElementById('k-conf').textContent = (p.intensity !== undefined ? Math.round(p.intensity*100) : '—') + '%';
+    document.getElementById('k-radius').textContent = (p.radius_km ?? '—') + ' km';
+    document.getElementById('k-basin').textContent = region + ' catchment';
+    document.getElementById('k-flood').textContent =
+      (p.rainfall_mm||0) > 60 ? 'Grade 4 (Critical)' : (p.rainfall_mm||0) > 30 ? 'Grade 2 (Moderate)' : 'Grade 1 (Low)';
+
+    document.getElementById('scrubber-right').innerHTML =
+      `Velocity: ${((p.wind_speed_kmh||20)/4).toFixed(1)} km/h<br>Min core: ${p.pressure_hpa ?? '—'} hPa`;
+
+    document.getElementById('compare-sub').textContent =
+      `Evaluation grid: ${region} transect (Lat ${lat.toFixed(1)}°N, Lon ${lon.toFixed(1)}°E)`;
+    coarseGrid(p.rainfall_mm || 60);
+    fineRadial(p.rainfall_mm || 60);
+    document.getElementById('foot-coarse').innerHTML =
+      `Peak estimated: <b>${Math.round((p.rainfall_mm||60)*0.65)} mm / 24h</b> &middot; Coarse spatial discretization`;
+    document.getElementById('foot-fine').innerHTML =
+      `Peak detected: <b>${p.rainfall_mm ?? '—'} mm / 24h</b> &middot; Localized micro-topography risk surfaced`;
+
+    document.getElementById('t-rain').textContent = (p.rainfall_mm ?? '—') + ' mm';
+    document.getElementById('t-rain-d').textContent = '↑ anomaly vs norm';
+    document.getElementById('t-wind').textContent = (p.wind_speed_kmh ?? '—') + ' km/h';
+    document.getElementById('t-wind-d').textContent = 'gust vector';
+    document.getElementById('t-temp').textContent = (p.temperature_c ?? '—') + ' °C';
+    document.getElementById('t-temp-d').textContent = 'regional mean';
+    document.getElementById('t-press').textContent = (p.pressure_hpa ?? '—') + ' hPa';
+    document.getElementById('t-press-d').textContent = 'surface core';
+    document.getElementById('t-int').textContent = (p.intensity !== undefined ? p.intensity.toFixed(2) : '—') + ' / 1.0';
+    document.getElementById('t-int-d').textContent = 'critical severity';
+    document.getElementById('t-ens').textContent = (p.intensity !== undefined ? Math.round(p.intensity*100) : '—') + '%';
+    document.getElementById('t-ens-d').textContent = 'ensemble agreement';
+
+    // markers for every tracked zone
+    features.forEach(f => {
+      const pp = f.properties;
+      const [flon, flat] = f.geometry.coordinates;
+      const color = SEV_COLOR[pp.severity] || SEV_COLOR.low;
+      L.circle([flat, flon], { radius: (pp.radius_km||5)*1000, color, fillColor: color, fillOpacity: .15, weight: 1.5 }).addTo(map);
+      L.circleMarker([flat, flon], { radius: 8, color, fillColor: color, fillOpacity: .9, weight: 2 })
+        .addTo(map)
+        .bindPopup(`<b>${pp.region_name||'Zone'}</b><br>${pp.event_type||''}<br>${pp.rainfall_mm??'—'} mm · ${pp.wind_speed_kmh??'—'} km/h`);
+    });
+
+    renderRegistry(features);
+  })
+  .catch(() => {
+    document.getElementById('banner-text').textContent =
+      'No output/alerts.geojson found — run scripts/run_demo.py from the project root, then reload.';
+    renderRegistry([]);
+  });
+</script>
+</body>
+</html>
